@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sinkhorn Sort Net — Level 1 Visualizer</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c10; --surface: #12151c; --surface2: #1a1e28;
+    --border: #2a2f3c; --text: #c8cdd8; --text-dim: #6b7280;
+    --accent: #4fd1c5; --accent2: #f6ad55; --accent3: #fc8181;
+    --positive: #68d391; --negative: #fc8181;
+    --mono: 'JetBrains Mono', monospace; --sans: 'DM Sans', sans-serif;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:var(--sans); min-height:100vh; }
+
+  .header {
+    padding:24px 32px; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  }
+  .header h1 { font-family:var(--mono); font-size:18px; font-weight:600; color:var(--accent); }
+  .header .tag {
+    font-family:var(--mono); font-size:10px; padding:3px 8px; border-radius:4px;
+    background:var(--surface2); border:1px solid var(--border); color:var(--text-dim);
+  }
+  .header .spacer { flex:1; }
+  .btn {
+    font-family:var(--mono); font-size:11px; font-weight:500; padding:7px 14px;
+    border-radius:5px; border:1px solid var(--border); background:var(--surface2);
+    color:var(--text); cursor:pointer; transition:all 0.15s;
+  }
+  .btn:hover { border-color:var(--accent); color:var(--accent); }
+  .btn.primary { background:var(--accent); color:var(--bg); border-color:var(--accent); }
+  .btn.primary:hover { opacity:0.85; }
+
+  .main { display:grid; grid-template-columns:260px 1fr; min-height:calc(100vh - 72px); }
+
+  .panel-left {
+    padding:20px; border-right:1px solid var(--border);
+    display:flex; flex-direction:column; gap:12px; overflow-y:auto;
+  }
+  .section-title {
+    font-family:var(--mono); font-size:10px; font-weight:600;
+    text-transform:uppercase; letter-spacing:1px; color:var(--text-dim); margin-bottom:2px;
+  }
+  .input-row { display:flex; align-items:center; gap:6px; }
+  .input-row .idx { font-family:var(--mono); font-size:9px; color:var(--text-dim); width:16px; text-align:right; }
+  .input-row input[type="range"] { flex:1; accent-color:var(--accent); height:3px; }
+  .input-row .val { font-family:var(--mono); font-size:10px; color:var(--accent); width:40px; text-align:right; }
+  .btn-row { display:flex; gap:6px; flex-wrap:wrap; }
+
+  .status-box {
+    padding:10px; background:var(--surface2); border-radius:6px; border:1px solid var(--border);
+  }
+  .status-box .label {
+    font-family:var(--mono); font-size:9px; color:var(--text-dim);
+    text-transform:uppercase; letter-spacing:0.5px;
+  }
+  .status-box .value { font-family:var(--mono); font-size:12px; margin-top:3px; }
+  .status-box .value.ok { color:var(--positive); }
+  .status-box .value.fail { color:var(--negative); }
+  .status-box .value.neutral { color:var(--text); }
+
+  .panel-right { padding:20px; overflow-y:auto; display:flex; flex-direction:column; gap:20px; }
+  .viz-card {
+    background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px;
+  }
+  .viz-card h3 {
+    font-family:var(--mono); font-size:11px; font-weight:600; color:var(--text-dim);
+    text-transform:uppercase; letter-spacing:0.6px; margin-bottom:12px;
+  }
+  .viz-card h3 .dim { font-weight:400; opacity:0.5; }
+
+  .vector-row { display:flex; gap:2px; align-items:flex-end; height:64px; }
+  .vector-row .bar-w {
+    flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end;
+    gap:2px; height:100%;
+  }
+  .vector-row .bar { width:100%; border-radius:2px 2px 0 0; min-height:1px; transition:height 0.25s; }
+  .vector-row .bar-lbl { font-family:var(--mono); font-size:7px; color:var(--text-dim); }
+
+  .act-strip { display:flex; gap:1px; height:20px; align-items:flex-end; }
+  .act-strip .ab { flex:1; min-width:0; border-radius:1px 1px 0 0; }
+  .layer-sec { margin-bottom:8px; }
+  .layer-sec .ll { font-family:var(--mono); font-size:9px; color:var(--text-dim); margin-bottom:3px; }
+
+  .matrix-wrap { overflow-x:auto; }
+  .matrix-grid { display:grid; gap:1px; background:var(--bg); border-radius:3px; overflow:hidden; }
+  .matrix-cell {
+    aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+    font-family:var(--mono); font-size:0; color:transparent; transition:background 0.15s; cursor:crosshair;
+  }
+  .matrix-cell:hover { outline:1px solid var(--accent); z-index:1; font-size:7px; color:white; }
+
+  .perm-canvas-wrap { width:100%; overflow:hidden; }
+  .perm-canvas-wrap canvas { display:block; width:100%; }
+
+  .compare-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .matrices-row {
+    display:flex; gap:16px; justify-content:center; align-items:flex-start;
+  }
+  .matrices-row .viz-card { flex:0 0 auto; width:320px; }
+
+  .matrix-compact .matrix-grid { gap:0; }
+  .matrix-compact .matrix-cell {
+    aspect-ratio:1; font-size:0; padding:0; min-width:0; min-height:0;
+  }
+  .matrix-compact .matrix-cell:hover {
+    font-size:0; outline:1px solid var(--accent); z-index:2;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7);
+    backdrop-filter:blur(4px); z-index:100; align-items:center; justify-content:center;
+  }
+  .modal-overlay.open { display:flex; }
+  .modal {
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    width:680px; max-width:92vw; max-height:80vh; display:flex; flex-direction:column;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5);
+  }
+  .modal-header {
+    padding:16px 20px; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .modal-header h2 { font-family:var(--mono); font-size:13px; font-weight:600; }
+  .modal-body { padding:16px 20px; flex:1; overflow:auto; }
+  .modal-body textarea {
+    width:100%; height:280px; background:var(--bg); border:1px solid var(--border);
+    border-radius:5px; color:var(--text); font-family:var(--mono); font-size:10px;
+    padding:10px; resize:vertical;
+  }
+  .modal-body textarea:focus { outline:none; border-color:var(--accent); }
+  .modal-body p { font-size:12px; color:var(--text-dim); margin-bottom:10px; line-height:1.5; }
+  .modal-footer {
+    padding:12px 20px; border-top:1px solid var(--border); display:flex; gap:8px; justify-content:flex-end;
+  }
+  .no-model-msg {
+    padding:40px; text-align:center; color:var(--text-dim); font-family:var(--mono); font-size:12px; line-height:1.8;
+  }
+
+  @media (max-width:800px) {
+    .main { grid-template-columns:1fr; }
+    .panel-left { border-right:none; border-bottom:1px solid var(--border); }
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>sinkhorn_sort::level1</h1>
+  <span class="tag">16 → MLP[128×4] → 16×16 scores → Sinkhorn → Hard Perm → 16</span>
+  <div class="spacer"></div>
+  <button class="btn" onclick="openModal()">Load Weights</button>
+</div>
+
+<div class="main">
+  <div class="panel-left">
+    <div>
+      <div class="section-title">Input Vector [16]</div>
+      <div id="input-sliders"></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn" onclick="randomizeInputs()">Random</button>
+      <button class="btn" onclick="ascendingInputs()">Ascending</button>
+      <button class="btn" onclick="descendingInputs()">Descending</button>
+      <button class="btn" onclick="wiggleInputs()">Wiggle</button>
+      <button class="btn" onclick="nearDuplicates()">Near-dupes</button>
+    </div>
+    <div style="flex:1"></div>
+    <div class="status-box">
+      <div class="label">Model</div>
+      <div class="value neutral" id="model-status">No model loaded</div>
+    </div>
+    <div class="status-box">
+      <div class="label">Result</div>
+      <div class="value neutral" id="result-status">—</div>
+    </div>
+    <div class="status-box">
+      <div class="label">Debug</div>
+      <div class="value neutral" id="debug-status" style="font-size:9px;word-break:break-all;">—</div>
+    </div>
+  </div>
+
+  <div class="panel-right" id="viz-area">
+    <div class="no-model-msg" id="no-model-msg">
+      Load model weights to begin.<br>
+      Click <b>Load Weights</b> → paste your <code>sort_sinkhorn.json</code> checkpoint.
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Load Model Weights</h2>
+      <button class="btn" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p>Paste the full contents of <code>checkpoints/sort_sinkhorn.json</code></p>
+      <textarea id="weights-input" spellcheck="false"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn primary" onclick="loadWeights()">Load & Run</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Architecture constants (must match Rust) ──────────────────────
+const N = 16;
+const HIDDEN = 128;
+const NUM_HIDDEN = 4;
+const SCORE_SIZE = N * N; // 256
+const SINKHORN_ITERS = 20;
+const TAU = 0.1;
+
+let model = null;
+let lastResult = null;
+const inputs = new Float32Array(N);
+
+// ─── Input UI ───────────────────────────────────────────────────────
+function initInputs() {
+  const c = document.getElementById('input-sliders');
+  c.innerHTML = '';
+  for (let i = 0; i < N; i++) {
+    inputs[i] = Math.random();
+    const row = document.createElement('div');
+    row.className = 'input-row';
+    row.innerHTML = `<span class="idx">${i}</span>
+      <input type="range" min="0" max="1" step="0.001" value="${inputs[i]}"
+             oninput="setInput(${i},this.value)">
+      <span class="val" id="v${i}">${inputs[i].toFixed(3)}</span>`;
+    c.appendChild(row);
+  }
+}
+
+function setInput(i, v) {
+  inputs[i] = parseFloat(v);
+  document.getElementById(`v${i}`).textContent = inputs[i].toFixed(3);
+  if (model) runInference();
+}
+
+function randomizeInputs() {
+  for (let i = 0; i < N; i++) inputs[i] = Math.random();
+  syncSliders();
+  if (model) runInference();
+}
+
+function ascendingInputs() {
+  for (let i = 0; i < N; i++) inputs[i] = i / (N - 1);
+  syncSliders();
+  if (model) runInference();
+}
+
+function descendingInputs() {
+  for (let i = 0; i < N; i++) inputs[i] = 1.0 - i / (N - 1);
+  syncSliders();
+  if (model) runInference();
+}
+
+function wiggleInputs() {
+  for (let i = 0; i < N; i++) {
+    inputs[i] = Math.max(0, Math.min(1, inputs[i] + (Math.random() - 0.5) * 0.2));
+  }
+  syncSliders();
+  if (model) runInference();
+}
+
+function nearDuplicates() {
+  // Test case: values clustered in tight groups — hard for the network
+  for (let i = 0; i < N; i++) inputs[i] = 0.3 + (i % 4) * 0.15 + Math.random() * 0.01;
+  syncSliders();
+  if (model) runInference();
+}
+
+function syncSliders() {
+  for (let i = 0; i < N; i++) {
+    const s = document.querySelector(`#input-sliders .input-row:nth-child(${i+1}) input`);
+    if (s) s.value = inputs[i];
+    const v = document.getElementById(`v${i}`);
+    if (v) v.textContent = inputs[i].toFixed(3);
+  }
+}
+
+// ─── Modal ──────────────────────────────────────────────────────────
+function openModal() { document.getElementById('modal-overlay').classList.add('open'); }
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('modal-overlay')) return;
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+
+// ─── Weight parsing ─────────────────────────────────────────────────
+// Burn 0.20 PrettyJsonFileRecorder stores tensors as raw u8 byte arrays.
+// Each f32 = 4 bytes, little-endian.
+function bytesToF32(bytes) {
+  const buf = new ArrayBuffer(bytes.length);
+  const u8 = new Uint8Array(buf);
+  for (let i = 0; i < bytes.length; i++) u8[i] = bytes[i];
+  return new Float32Array(buf);
+}
+
+function extractParam(obj) {
+  // Format: { "id": "xxx", "param": { "bytes": [u8...] } }
+  if (obj && obj.param && obj.param.bytes) return bytesToF32(obj.param.bytes);
+  if (obj && obj.bytes) return bytesToF32(obj.bytes);
+  // Fallback for older formats with float arrays
+  if (obj && obj.param && obj.param.value) return new Float32Array(obj.param.value.flat(Infinity));
+  if (obj && obj.value) return new Float32Array(obj.value.flat(Infinity));
+  return null;
+}
+
+function loadWeights() {
+  const text = document.getElementById('weights-input').value.trim();
+  try {
+    const json = JSON.parse(text);
+    const root = json.item || json;
+    const layers = [];
+
+    // Input layer: Linear(16 → 128)
+    const il = root.input_layer;
+    layers.push(parseLinear(il, HIDDEN, N, 'input_layer'));
+
+    // Hidden layers: Linear(128 → 128) × NUM_HIDDEN
+    const hl = root.hidden_layers;
+    const hArr = Array.isArray(hl) ? hl : Object.values(hl);
+    for (let i = 0; i < hArr.length; i++) {
+      layers.push(parseLinear(hArr[i], HIDDEN, HIDDEN, `hidden[${i}]`));
+    }
+
+    // Output layer: Linear(128 → 256)
+    const ol = root.output_layer;
+    layers.push(parseLinear(ol, SCORE_SIZE, HIDDEN, 'output_layer'));
+
+    model = { layers };
+    const total = layers.reduce((s, l) => s + l.w.length + l.b.length, 0);
+    document.getElementById('model-status').textContent = `${layers.length} layers, ${total} params`;
+    document.getElementById('model-status').className = 'value ok';
+    const nmm = document.getElementById('no-model-msg');
+    if (nmm) nmm.style.display = 'none';
+    closeModal();
+    runInference();
+  } catch (e) {
+    alert('Failed to parse: ' + e.message);
+  }
+}
+
+function parseLinear(obj, outDim, inDim, name) {
+  const w = extractParam(obj.weight);
+  const b = extractParam(obj.bias);
+  if (!w) throw new Error(`${name}: cannot parse weight`);
+  if (!b) throw new Error(`${name}: cannot parse bias`);
+  // Burn Linear stores weight as [out_features, in_features], row-major
+  if (w.length !== outDim * inDim)
+    throw new Error(`${name}: weight size ${w.length}, expected ${outDim}×${inDim}=${outDim*inDim}`);
+  if (b.length !== outDim)
+    throw new Error(`${name}: bias size ${b.length}, expected ${outDim}`);
+  return { w, b, outDim, inDim };
+}
+
+// ─── Inference (matches Rust forward_soft / forward_hard exactly) ───
+
+// Burn's Linear layer: output = input @ weight^T + bias
+// Weight logical shape is [out_features, in_features], but burn serializes
+// tensors in column-major (Fortran) order. So the bytes are laid out as
+// if the shape were [in_features, out_features] in row-major.
+//
+// To compute y[r] = Σ_c W[r,c] * x[c] + b[r] with column-major storage:
+//   W[r,c] lives at offset c * outDim + r (column-major indexing)
+function linear(layer, x) {
+  const { w, b, outDim, inDim } = layer;
+  const y = new Float32Array(outDim);
+  for (let r = 0; r < outDim; r++) {
+    let sum = b[r];
+    for (let c = 0; c < inDim; c++) {
+      sum += w[c * outDim + r] * x[c];  // column-major access
+    }
+    y[r] = sum;
+  }
+  return y;
+}
+
+function relu(x) {
+  const y = new Float32Array(x.length);
+  for (let i = 0; i < x.length; i++) y[i] = x[i] > 0 ? x[i] : 0;
+  return y;
+}
+
+// Sinkhorn: alternate row/col normalization, matching Rust exactly
+function sinkhornNormalize(expMatrix, n, iters) {
+  // Use f64 for stability, matching Rust's behavior
+  const s = new Float64Array(n * n);
+  for (let i = 0; i < n * n; i++) s[i] = expMatrix[i];
+
+  for (let it = 0; it < iters; it++) {
+    // Row normalization: each row sums to 1
+    for (let r = 0; r < n; r++) {
+      let sum = 1e-6;
+      for (let c = 0; c < n; c++) sum += s[r * n + c];
+      for (let c = 0; c < n; c++) s[r * n + c] /= sum;
+    }
+    // Column normalization: each column sums to 1
+    for (let c = 0; c < n; c++) {
+      let sum = 1e-6;
+      for (let r = 0; r < n; r++) sum += s[r * n + c];
+      for (let r = 0; r < n; r++) s[r * n + c] /= sum;
+    }
+  }
+  return new Float32Array(s);
+}
+
+// Greedy hard permutation extraction — matches Rust forward_hard exactly
+function hardPerm(P, n) {
+  const perm = new Int32Array(n).fill(-1);
+  const used = new Uint8Array(n);
+
+  // Sort rows by max confidence (highest first)
+  const rowOrder = Array.from({ length: n }, (_, i) => i);
+  rowOrder.sort((a, b) => {
+    let ma = -Infinity, mb = -Infinity;
+    for (let c = 0; c < n; c++) {
+      if (P[a * n + c] > ma) ma = P[a * n + c];
+      if (P[b * n + c] > mb) mb = P[b * n + c];
+    }
+    return mb - ma;
+  });
+
+  for (const row of rowOrder) {
+    let bestCol = -1, bestVal = -Infinity;
+    for (let c = 0; c < n; c++) {
+      if (!used[c] && P[row * n + c] > bestVal) {
+        bestVal = P[row * n + c];
+        bestCol = c;
+      }
+    }
+    perm[row] = bestCol;
+    used[bestCol] = 1;
+  }
+  return perm;
+}
+
+function runInference() {
+  if (!model) return;
+
+  const activations = [];
+  let x = new Float32Array(inputs);
+  activations.push({ label: 'Input [16]', data: new Float32Array(x), kind: 'input' });
+
+  // MLP forward: input → hidden layers with ReLU → output (no activation)
+  for (let i = 0; i < model.layers.length; i++) {
+    const L = model.layers[i];
+    let y = linear(L, x);
+
+    if (i < model.layers.length - 1) {
+      // Hidden layer: apply ReLU
+      const preAct = new Float32Array(y);
+      y = relu(y);
+      activations.push({
+        label: `Layer ${i} ReLU [${y.length}]`,
+        data: new Float32Array(y),
+        kind: 'hidden'
+      });
+    } else {
+      // Output layer: raw scores, no activation
+      activations.push({
+        label: `Score output [${y.length}]`,
+        data: new Float32Array(y),
+        kind: 'scores'
+      });
+    }
+    x = y;
+  }
+
+  // x = raw scores [256]. Reshape to [16, 16] is just reinterpretation.
+  const rawScores = new Float32Array(x);
+
+  // Temperature scaling + exp + clamp (matching Rust)
+  const expScaled = new Float32Array(SCORE_SIZE);
+  for (let i = 0; i < SCORE_SIZE; i++) {
+    const v = x[i] / TAU;
+    expScaled[i] = Math.exp(Math.max(-50, Math.min(50, v)));
+  }
+
+  // Sinkhorn iterations
+  const P = sinkhornNormalize(expScaled, N, SINKHORN_ITERS);
+
+  // Hard permutation
+  const perm = hardPerm(P, N);
+
+  // Apply: output[i] = input[perm[i]]
+  const output = new Float32Array(N);
+  for (let i = 0; i < N; i++) output[i] = inputs[perm[i]];
+
+  // Ground truth
+  const sorted = Array.from(inputs).sort((a, b) => a - b);
+
+  // Check
+  const mono = output.every((_, i) => i === 0 || output[i - 1] <= output[i]);
+  const predS = Array.from(output).sort((a, b) => a - b);
+  const inpS = Array.from(inputs).sort((a, b) => a - b);
+  const setOk = predS.every((v, i) => Math.abs(v - inpS[i]) < 0.005);
+  const correct = mono && setOk;
+
+  const inversions = countInversions(output);
+
+  lastResult = { activations, rawScores, P, perm, output, sorted, mono, setOk, correct, inversions };
+
+  // Debug: show a few raw scores and P values
+  const dbg = document.getElementById('debug-status');
+  dbg.textContent = `scores[0..4]: ${Array.from(rawScores.slice(0,4)).map(v=>v.toFixed(3)).join(', ')} | ` +
+    `P[0][0..3]: ${Array.from(P.slice(0,3)).map(v=>v.toFixed(4)).join(', ')} | ` +
+    `perm: [${Array.from(perm).join(',')}]`;
+
+  const st = document.getElementById('result-status');
+  if (correct) {
+    st.textContent = `CORRECT — perfectly sorted`;
+    st.className = 'value ok';
+  } else {
+    st.textContent = `${inversions} inversion${inversions !== 1 ? 's' : ''} remaining`;
+    st.className = 'value fail';
+  }
+
+  renderViz();
+}
+
+function countInversions(a) {
+  let c = 0;
+  for (let i = 0; i < a.length; i++)
+    for (let j = i + 1; j < a.length; j++)
+      if (a[i] > a[j]) c++;
+  return c;
+}
+
+// ─── Visualization ──────────────────────────────────────────────────
+
+function heatColor(v, lo, hi) {
+  const t = Math.max(0, Math.min(1, (v - lo) / (hi - lo + 1e-12)));
+  const r = Math.round(t < 0.5 ? 0 : (t - 0.5) * 2 * 255);
+  const g = Math.round(t < 0.5 ? t * 2 * 200 : 200 - (t - 0.5) * 2 * 60);
+  const b = Math.round(t < 0.5 ? 60 + t * 2 * 120 : 180 - (t - 0.5) * 2 * 180);
+  return `rgb(${r},${g},${b})`;
+}
+
+function vecBars(data, color) {
+  const mx = Math.max(...data.map(Math.abs), 1e-6);
+  return `<div class="vector-row">${data.map((v, i) =>
+    `<div class="bar-w">
+      <div class="bar" style="height:${Math.abs(v)/mx*56}px;background:${v >= 0 ? color : 'var(--accent3)'};opacity:${0.35 + Math.abs(v)/mx*0.65}"></div>
+      <div class="bar-lbl">${v.toFixed(3)}</div>
+    </div>`
+  ).join('')}</div>`;
+}
+
+function matrixHeat(data, n, compact) {
+  const lo = Math.min(...data), hi = Math.max(...data);
+  const cls = compact ? ' matrix-compact' : '';
+  let h = `<div class="matrix-wrap${cls}"><div class="matrix-grid" style="grid-template-columns:repeat(${n},1fr)">`;
+  for (let r = 0; r < n; r++)
+    for (let c = 0; c < n; c++) {
+      const v = data[r * n + c];
+      h += `<div class="matrix-cell" style="background:${heatColor(v, lo, hi)}" title="[${r},${c}] = ${v.toFixed(5)}"></div>`;
+    }
+  h += `</div></div>`;
+  return h;
+}
+
+function drawPermArrows(container, perm, inp, out) {
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = container.clientWidth;
+  const cssH = 130;
+  const canvas = document.createElement('canvas');
+  canvas.width = cssW * dpr;
+  canvas.height = cssH * dpr;
+  canvas.style.width = cssW + 'px';
+  canvas.style.height = cssH + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const pad = 30, w = cssW - 2 * pad, topY = 22, botY = 108;
+  const sorted = Array.from(inp).sort((a, b) => a - b);
+
+  ctx.font = '10px JetBrains Mono';
+  ctx.textAlign = 'center';
+
+  // Draw nodes and labels
+  for (let i = 0; i < N; i++) {
+    const x = pad + (i / (N - 1)) * w;
+
+    // Top: input
+    ctx.fillStyle = '#4fd1c5';
+    ctx.beginPath(); ctx.arc(x, topY, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#6b7280';
+    ctx.fillText(inp[i].toFixed(2), x, topY - 9);
+
+    // Bottom: output
+    ctx.fillStyle = '#f6ad55';
+    ctx.beginPath(); ctx.arc(x, botY, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#6b7280';
+    ctx.fillText(out[i].toFixed(2), x, botY + 14);
+  }
+
+  // Draw arrows
+  for (let outIdx = 0; outIdx < N; outIdx++) {
+    const inIdx = perm[outIdx];
+    if (inIdx < 0) continue;
+    const x1 = pad + (inIdx / (N - 1)) * w;
+    const x2 = pad + (outIdx / (N - 1)) * w;
+    const ok = Math.abs(out[outIdx] - sorted[outIdx]) < 0.001;
+
+    ctx.strokeStyle = ok ? '#68d39188' : '#fc818188';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x1, topY + 8);
+    ctx.bezierCurveTo(x1, topY + 34, x2, botY - 30, x2, botY - 6);
+    ctx.stroke();
+
+    ctx.fillStyle = ok ? '#68d391' : '#fc8181';
+    ctx.beginPath();
+    ctx.moveTo(x2 - 3, botY - 9);
+    ctx.lineTo(x2 + 3, botY - 9);
+    ctx.lineTo(x2, botY - 4);
+    ctx.fill();
+  }
+
+  container.appendChild(canvas);
+}
+
+function renderViz() {
+  if (!lastResult) return;
+  const { activations, rawScores, P, perm, output, sorted } = lastResult;
+  const area = document.getElementById('viz-area');
+
+  let h = '';
+
+  // Input
+  h += `<div class="viz-card"><h3>Input <span class="dim">[${N}]</span></h3>
+    ${vecBars(Array.from(inputs), 'var(--accent)')}</div>`;
+
+  // Hidden activations (compact)
+  h += `<div class="viz-card"><h3>MLP Activations</h3>`;
+  for (const a of activations) {
+    if (a.kind === 'hidden') {
+      const mx = Math.max(...Array.from(a.data).map(Math.abs), 1e-6);
+      h += `<div class="layer-sec"><div class="ll">${a.label}</div><div class="act-strip">`;
+      for (let i = 0; i < a.data.length; i++) {
+        const v = a.data[i];
+        h += `<div class="ab" style="height:${Math.abs(v)/mx*18}px;background:${v>0?'var(--accent)':'var(--accent3)'};opacity:${0.3+Math.abs(v)/mx*0.7}" title="${v.toFixed(4)}"></div>`;
+      }
+      h += `</div></div>`;
+    }
+  }
+  h += `</div>`;
+
+  // Matrices side by side, compact
+  h += `<div class="matrices-row">
+    <div class="viz-card"><h3>Raw Scores <span class="dim">[16×16]</span></h3>
+      ${matrixHeat(rawScores, N, true)}</div>
+    <div class="viz-card"><h3>Sinkhorn P <span class="dim">[16×16] τ=${TAU}</span></h3>
+      ${matrixHeat(P, N, true)}</div>
+  </div>`;
+
+  // Permutation arrows
+  h += `<div class="viz-card"><h3>Hard Permutation <span class="dim">green=correct red=wrong</span></h3>
+    <div class="perm-canvas-wrap" id="perm-wrap"></div></div>`;
+
+  // Output vs target
+  h += `<div class="compare-row">
+    <div class="viz-card"><h3>Network Output <span class="dim">[${N}]</span></h3>
+      ${vecBars(Array.from(output), 'var(--accent2)')}</div>
+    <div class="viz-card"><h3>Ground Truth <span class="dim">[${N}] sorted</span></h3>
+      ${vecBars(sorted, 'var(--positive)')}</div>
+  </div>`;
+
+  area.innerHTML = h;
+
+  // Render perm canvas (after DOM is set)
+  const wrap = document.getElementById('perm-wrap');
+  if (wrap) {
+    drawPermArrows(wrap, perm, Array.from(inputs), Array.from(output));
+  }
+}
+
+// ─── Init ───────────────────────────────────────────────────────────
+initInputs();
+</script>
+</body>
+</html>
