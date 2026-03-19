@@ -1,2 +1,3 @@
 # Neural network based sorter
-<img width="3784" height="1935" alt="image" src="https://github.com/user-attachments/assets/b9ded0e9-56d7-42e5-9e68-1d2a0b95bcbc" />
+<img width="3780" height="1929" alt="image" src="https://github.com/user-attachments/assets/e0f7e2fe-5d7e-4217-992d-db92af3907ef" />
+
