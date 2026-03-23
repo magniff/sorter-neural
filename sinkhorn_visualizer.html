@@ -34,8 +34,6 @@
   .btn:hover { border-color:var(--accent); color:var(--accent); }
   .btn.primary { background:var(--accent); color:var(--bg); border-color:var(--accent); }
   .btn.primary:hover { opacity:0.85; }
-  .btn.primary:disabled { opacity:0.4; cursor:default; }
-  .btn.primary:disabled:hover { opacity:0.4; }
 
   .main { display:grid; grid-template-columns:260px 1fr; min-height:calc(100vh - 72px); }
 
@@ -113,45 +111,6 @@
     font-size:0; outline:1px solid var(--accent); z-index:2;
   }
 
-  /* Modal */
-  .modal-overlay {
-    display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7);
-    backdrop-filter:blur(4px); z-index:100; align-items:center; justify-content:center;
-  }
-  .modal-overlay.open { display:flex; }
-  .modal {
-    background:var(--surface); border:1px solid var(--border); border-radius:10px;
-    width:520px; max-width:92vw; max-height:80vh; display:flex; flex-direction:column;
-    box-shadow:0 20px 60px rgba(0,0,0,0.5);
-  }
-  .modal-header {
-    padding:16px 20px; border-bottom:1px solid var(--border);
-    display:flex; align-items:center; justify-content:space-between;
-  }
-  .modal-header h2 { font-family:var(--mono); font-size:13px; font-weight:600; }
-  .modal-body { padding:16px 20px; flex:1; overflow:auto; }
-  .modal-body p { font-size:12px; color:var(--text-dim); margin-bottom:10px; line-height:1.5; }
-  .modal-footer {
-    padding:12px 20px; border-top:1px solid var(--border); display:flex; gap:8px; justify-content:flex-end;
-  }
-
-  .drop-zone {
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:12px; padding:40px 20px;
-    border:2px dashed var(--border); border-radius:8px;
-    cursor:pointer; transition:border-color 0.15s, background 0.15s;
-  }
-  .drop-zone:hover { border-color:var(--accent); background:rgba(79,209,197,0.03); }
-  .drop-zone.dragover { border-color:var(--accent); background:rgba(79,209,197,0.06); }
-  .drop-zone .icon { font-size:28px; color:var(--text-dim); line-height:1; }
-  .drop-zone .label { font-family:var(--mono); font-size:11px; color:var(--text-dim); text-align:center; }
-  .drop-zone .filename {
-    font-family:var(--mono); font-size:11px; color:var(--accent);
-    padding:4px 10px; background:var(--surface2); border-radius:4px;
-    border:1px solid var(--border); max-width:100%; overflow:hidden; text-overflow:ellipsis;
-    white-space:nowrap;
-  }
-
   .no-model-msg {
     padding:40px; text-align:center; color:var(--text-dim); font-family:var(--mono); font-size:12px; line-height:1.8;
   }
@@ -167,7 +126,8 @@
   <h1>sinkhorn_sort::level1</h1>
   <span class="tag">16 → MLP[128×4] → 16×16 scores → Sinkhorn → Hard Perm → 16</span>
   <div class="spacer"></div>
-  <button class="btn" onclick="openModal()">Load Weights</button>
+  <button class="btn" onclick="document.getElementById('file-input').click()">Load Weights</button>
+  <input type="file" id="file-input" accept=".json,application/json" style="display:none">
 </div>
 
 <div class="main">
@@ -206,27 +166,6 @@
   </div>
 </div>
 
-<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
-  <div class="modal" onclick="event.stopPropagation()">
-    <div class="modal-header">
-      <h2>Load Model Weights</h2>
-      <button class="btn" onclick="closeModal()">✕</button>
-    </div>
-    <div class="modal-body">
-      <p>Select your <code>sort_sinkhorn.json</code> checkpoint file.</p>
-      <div class="drop-zone" id="drop-zone"
-           onclick="document.getElementById('file-input').click()">
-        <span class="icon">⇧</span>
-        <span class="label" id="drop-label">Drop .json here or click to browse</span>
-        <input type="file" id="file-input" accept=".json,application/json" style="display:none">
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn" onclick="closeModal()">Cancel</button>
-      <button class="btn primary" id="load-btn" disabled>Load & Run</button>
-    </div>
-  </div>
-</div>
 
 <script>
 // ─── Architecture constants (must match Rust) ──────────────────────
@@ -239,54 +178,18 @@ const TAU = 0.1;
 
 let model = null;
 let lastResult = null;
-let pendingFileText = null;
 const inputs = new Float32Array(N);
 
-// ─── File picker / drag-and-drop ────────────────────────────────────
-(function initDropZone() {
-  const zone = document.getElementById('drop-zone');
-  const fileInput = document.getElementById('file-input');
-  const loadBtn = document.getElementById('load-btn');
-
-  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
-  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
-  zone.addEventListener('drop', e => {
-    e.preventDefault();
-    zone.classList.remove('dragover');
-    handleFiles(e.dataTransfer.files);
-  });
-  fileInput.addEventListener('change', () => handleFiles(fileInput.files));
-  loadBtn.addEventListener('click', loadWeightsFromFile);
-})();
-
-function handleFiles(files) {
-  if (!files || files.length === 0) return;
-  const file = files[0];
-  const label = document.getElementById('drop-label');
-  const loadBtn = document.getElementById('load-btn');
-
-  label.textContent = file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
-  label.style.color = 'var(--accent)';
-  label.className = 'label filename';
-
+// ─── File picker ────────────────────────────────────────────────────
+document.getElementById('file-input').addEventListener('change', function() {
+  const file = this.files[0];
+  if (!file) return;
   const reader = new FileReader();
-  reader.onload = () => {
-    pendingFileText = reader.result;
-    loadBtn.disabled = false;
-    loadBtn.style.opacity = '1';
-  };
-  reader.onerror = () => {
-    label.textContent = 'Failed to read file';
-    label.style.color = 'var(--accent3)';
-  };
+  reader.onload = () => loadWeights(reader.result);
+  reader.onerror = () => alert('Failed to read file');
   reader.readAsText(file);
-}
-
-function loadWeightsFromFile() {
-  if (!pendingFileText) return;
-  loadWeights(pendingFileText);
-  pendingFileText = null;
-}
+  this.value = ''; // allow re-selecting same file
+});
 
 // ─── Input UI ───────────────────────────────────────────────────────
 function initInputs() {
@@ -351,25 +254,6 @@ function syncSliders() {
   }
 }
 
-// ─── Modal ──────────────────────────────────────────────────────────
-function openModal() {
-  // Reset state when opening
-  pendingFileText = null;
-  const label = document.getElementById('drop-label');
-  label.textContent = 'Drop .json here or click to browse';
-  label.style.color = '';
-  label.className = 'label';
-  const loadBtn = document.getElementById('load-btn');
-  loadBtn.disabled = true;
-  loadBtn.style.opacity = '0.4';
-  document.getElementById('file-input').value = '';
-  document.getElementById('modal-overlay').classList.add('open');
-}
-function closeModal(e) {
-  if (e && e.target !== document.getElementById('modal-overlay')) return;
-  document.getElementById('modal-overlay').classList.remove('open');
-}
-
 // ─── Weight parsing ─────────────────────────────────────────────────
 function bytesToF32(bytes) {
   const buf = new ArrayBuffer(bytes.length);
@@ -410,7 +294,6 @@ function loadWeights(text) {
     document.getElementById('model-status').className = 'value ok';
     const nmm = document.getElementById('no-model-msg');
     if (nmm) nmm.style.display = 'none';
-    closeModal();
     runInference();
   } catch (e) {
     alert('Failed to parse: ' + e.message);
